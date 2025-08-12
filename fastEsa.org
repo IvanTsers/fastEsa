@@ -1,0 +1,252 @@
+#+begin_export latex
+The package \texttt{fastEsa} is a go interface for functions improted
+from \texttt{phylonium}. The package has hooks for a \texttt{cgo}
+preamble, imports, data types, methods, and functions.
+#+end_export
+#+begin_src go <<fastEsa.go>>=
+  package fastEsa
+  //<<cgo preamble>>
+
+  import(
+	  //<<Imports>>
+  )
+
+  //<<Data types>>
+  //<<Methods>>
+  //<<Functions>>
+#+end_src
+#+begin_export latex
+The \texttt{cgo} preamble contains:
+\begin{enumerate}
+  \itemsep0em
+  \item flags to compile \texttt{C++} code;
+  \item flags to link \texttt{C++} libraries;
+  \item includes for \texttt{C++};
+  \item an include for the header of the \texttt{C}-compatible wrapper
+    described above.
+  \item the \texttt{import "C"} statement that follows the above
+    immideately.
+\end{enumerate}
+#+end_export
+#+begin_src go <<cgo preamble>>=
+  /*
+  #cgo CXXFLAGS: -std=c++17 -I./phylonium -I./phylonium/src
+  #cgo LDFLAGS: -L. -lwrapper -lphylonium -ldivsufsort64 -lstdc++ -lm
+  #include <stdlib.h>
+  #include "wrapper.h"
+  */
+  import "C"
+#+end_src
+#+begin_export latex
+The function \texttt{NewSequence} creates a \texttt{C} sequence, which
+are accessed by functions imported from \texttt{phylonium}. The
+function allocates and deallocates memory for sequence's name and
+data, calls the builder and returns a \texttt{C} pointer to it.
+#+end_export
+#+begin_src go <<Functions>>=
+  func NewSequence(n string, s []byte) *C.sequence_w {
+	  //<<Memory (de)allocation for a sequence>>
+	  return C.sequence_build_w(nC, sC)
+  }
+#+end_src
+#+begin_export latex
+We convert the sequence's name into a \texttt{C} string. Then we
+convert the sequence data byte slice into a \texttt{C} string with the
+function \texttt{byteSliceToCString}, which we have not written
+yet. We remove both strings from memory when the function stops with
+\texttt{freeString}, which we will write shortly.
+#+end_export
+#+begin_src go <<Memory (de)allocation for a sequence>>=
+  nC := C.CString(n)
+  sC := byteSliceToCString(s)
+  defer freeString(nC)
+  defer freeString(sC)
+#+end_src
+#+begin_export latex
+To convert a \texttt{go} byte slice to a \texttt{C} string is to
+append a zero byte to the slice, cast it as a \texttt{go} string that
+eventually is turned into a \texttt{C} string with the function 
+\texttt{C.Cstring}. The function \texttt{byteSliceToCString} accepts a
+slice of bytes and returns a \texttt{C} pointer to \texttt{char}.
+#+end_export
+#+begin_src go <<Functions>>=
+  func byteSliceToCString(b []byte) *C.char {
+	  b = append(b, 0)
+	  return C.CString(string(b))
+  }
+#+end_src
+#+begin_export latex
+The function \texttt{freeString} frees memory allocated by \texttt{C}
+for a string (\texttt{char}). It accepts a pointer to the string.
+#+end_export
+#+begin_src go <<Functions>>=
+  func freeString(p *C.char) {
+	  C.free(unsafe.Pointer(p))
+  }
+#+end_src
+#+begin_export latex
+We import \texttt{unsafe}.
+#+end_export
+#+begin_src go <<Imports>>=
+  "unsafe"
+#+end_src
+#+begin_export latex
+The function \texttt{freeSequence} removes a pointer of type
+\texttt{C.sequence\_w} from memory. It calls the destructor for the
+sequence.
+#+end_export
+#+begin_src go <<Functions>>=
+  func freeSequence(sequence *C.sequence_w) {
+	  C.sequence_destroy_w(sequence)
+  }
+#+end_src
+#+begin_export latex
+\subsection{Type \texttt{Esa}}
+We define a \texttt{Go} interface for \texttt{phylonium}'s ESA. An
+\texttt{Esa} struct contains a hande for the actual \texttt{C++}
+implementation. Soon we will define methods to create and destroy an
+\texttt{Esa}, as well as methods to acces the underlying (base) text
+and the suffix array itself. Note that we are not going to expose LCP
+and CLD arrays here. But if we would like to do so in the future, we
+would have expanded the \texttt{C/C++} wrapper for \texttt{phylonium}'s
+code first.
+#+end_export
+#+begin_src go <<Data types>>=
+  type Esa struct {
+	  h *C.esa_w
+  }
+#+end_src
+#+begin_export latex
+\subsubsection{Function \texttt{NewEsa}}
+The function \texttt{NewEsa} calls the builder wrapper to create an
+instance of \texttt{phylonium}'s ESA. The function returns a pointer
+to an \texttt{Esa} struct.
+#+end_export
+#+begin_src go <<Methods>>=
+  func NewEsa(sequence *C.sequence_w) *Esa {
+	  return &Esa{
+		  h: C.esa_build_w(sequence),
+	  }
+  }
+#+end_src
+#+begin_export latex
+\subsubsection{Method \texttt{Free}}
+The method \texttt{Free} calls the destructor wrapper to free memory
+allocated for the current instance of \texttt{phylonium}'s ESA. The
+function erases the existing \texttt{Esa}.
+#+end_export
+#+begin_src go <<Methods>>=
+  func (e *Esa) Free() {
+	  if e != nil && e.h != nil {
+		  C.esa_destroy_w(e.h)
+		  e.h = nil
+	  }
+  }
+#+end_src
+#+begin_export latex
+\subsubsection{Method \texttt{T}}
+The method \texttt{T} accesses the underlying text of the \texttt{Esa}
+and returns it as a slice of bytes.
+#+end_export
+#+begin_src go <<Methods>>=
+  func (e *Esa) T() []byte {
+	  var bytes []byte
+	  if e.h != nil {
+		  sC := C.esa_get_S_w(e.h)
+		  sGo := C.GoString(sC)
+		  bytes = []byte(sGo)
+	  }
+	  return bytes
+  }
+#+end_src
+#+begin_export latex
+\subsubsection{Method \texttt{Sa}}
+The method \texttt{Sa} accesses the actual suffix array of the
+\texttt{Esa} and returns it as a slice of integers.
+
+To find the SA in memory, we need to know two things:
+\begin{enumerate}
+  \itemsep0em
+  \item where the first element of SA is (get the pointer);
+  \item how long the SA is (access the length).
+\end{enumerate}
+In our \texttt{C/C++} wrapper, we have already exposed two relevant
+functions to find these, so now we just call them and use their output
+to make a \texttt{Go} slice of integers. Note that with this method we
+do not access the data directly. Instead, we build a safe copy with
+stable types.
+
+\textit{A note for the future: it would be very neat to check if the
+  pointer is not nil and the length is not zero and add corresponding
+  error handling}.
+#+end_export
+#+begin_src go <<Methods>>=
+  func (e *Esa) Sa() []int {
+	  if e.h != nil {
+		  return nil
+	  }
+	  p := C.esa_get_SA_w(e.h)
+	  l := int(C.esa_get_SA_size_w(e.h))
+	  saC := unsafe.Slice(p, l)
+	  //<<Convert \texttt{[]\_Ctype\_long} to \texttt{[]int} and return>>
+  }
+#+end_src
+#+begin_export latex
+We copy values from the slice of \texttt{\_Ctype\_long} to a new slice
+of \texttt{Go int}s and return the latter.
+#+end_export
+#+begin_src go <<Convert \texttt{[]\_Ctype\_long} to \texttt{[]int} and return>>=
+  sa := make([]int, l)
+  for i, v := range saC {
+	  sa[i] = int(v)
+  }
+  return sa
+#+end_src
+#+begin_export latex
+\subsubsection{Method \texttt{MatchPref}}
+The method \texttt{MatchPref} calls the wrapper for
+\texttt{get\_match\_cached}. It accepts a byte slice of query data. It
+returns a pointer to a matching LCP interval, a data struct that we
+still have to write.
+
+We convert query data to a \texttt{C} string, measure its length and
+cast the latter into \texttt{size\_t}. Then we defer freeing of memory
+allocated for this string. Then we call \texttt{get\_match\_cached}
+and convert the output data type into a \texttt{go}-friendly struct.
+#+end_export
+#+begin_src go <<Methods>>=
+  func (e *Esa) MatchPref(query []byte) *Minterval {
+	  queryC := byteSliceToCString(query)
+	  defer freeString(queryC)
+	
+	  queryL := len(query)
+	  queryLC := C.size_t(queryL)
+
+	  lcpC := C.get_match_cached_w(e.h, queryC, queryLC)
+	  //<<Convert C LCP to match interval and return>>
+  }
+#+end_src
+#+begin_export latex
+\subsubsection{Helper type \texttt{Minterval}}
+We have to define our structure of a match interval. It is a has a
+beginning, an end, and a match length.
+#+end_export
+#+begin_src go <<Data types>>=
+  type Minterval struct {
+      I int
+      J int
+      L int
+  }
+#+end_src
+#+begin_export latex
+We convert the LCP interval (\texttt{C} type) to a match interval
+(\texttt{Go} type we've just defined)
+#+end_export
+#+begin_src go <<Convert C LCP to match interval and return>>=
+  match := Minterval{
+	  I: int(lcpC.i),
+	  J: int(lcpC.j),
+	  L: int(lcpC.l),
+  }
+  return &match
+#+end_src

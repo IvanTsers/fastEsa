@@ -1,0 +1,272 @@
+#+begin_export latex
+\textbf{TL;DR in this section, we're casting some spells to make
+  \texttt{C++} functions from \texttt{phylonium} accessible by
+  \texttt{cgo}.}
+
+The \texttt{gcc} compiler driven by \texttt{cgo} cannot work with the
+\texttt{C++} namespace, so we have to write a wrapper that exposes a
+\texttt{C}-compatible interface. Such an interface must not contain
+explicit includes of \texttt{C++}-specific libraries (like
+\texttt{<memory>}) or \texttt{C++} syntax (like \texttt{class} or
+\texttt{std::size\_t}).
+
+\subsection{Header file \texttt{wrapper.h}}
+We begin writing our wrapper with a header file. The core of the
+header is a \texttt{C}-friendly area, which contains declarations. The
+extensions of this area fenced by \texttt{ifdef} are off-limits for a
+\texttt{C} compiler.
+
+If the compiler uses the \texttt{\_\_cplusplus} preprocessor macro, we
+use the instruction \texttt{'extern "C"'} to force the usage of
+\texttt{C} name linkage (\texttt{no name mangling}). In other words,
+if the header is included in a \texttt{C++} file and we compile with
+\texttt{g++}, we make the output of \texttt{g++} compatible with
+\texttt{gcc}. The header contains \texttt{C++} imports (includes)
+\textit{outside} the \texttt{C}-friendly area.
+#+end_export
+#+begin_src c++ <<wrapper.h>>=
+  #ifndef WRAPPER
+  #define WRAPPER
+
+  #ifdef __cplusplus
+
+  //<<Header C++ includes>>
+
+  extern "C" {
+  #endif
+    // C-friendly area begins
+    //<<Wrapper's declarations>>
+    // C-friendly area ends
+  #ifdef __cplusplus
+  }
+  #endif
+
+  #endif
+#+end_src
+#+begin_export latex
+We are going to wrap:
+\begin{enumerate}
+  \itemsep0em
+\item class \texttt{sequence};
+\item struct \texttt{lcp\_interval};
+\item class \texttt{esa};
+\item function \texttt{get\_match\_cached()} that returns an
+  \texttt{lcp\_interval};
+\end{enumerate}
+#+end_export
+#+begin_src c++ <<Wrapper's declarations>>=
+  //<<sequence wrappers declaration>>
+  //<<lcp\_interval wrapper declaration>>
+  //<<esa wrappers declaration>>
+  //<<get\_match\_cached wrapper declaration>>
+#+end_src
+#+begin_export latex
+We declare \texttt{sequence} as a struct since \texttt{C} does not
+have classes. We also declare a constructor/destructor functions.
+#+end_export
+#+begin_src c++ <<sequence wrappers declaration>>=
+  typedef struct sequence_w sequence_w;
+  sequence_w* sequence_build_w (const char* name, const char* nucl);
+  void sequence_destroy_w(sequence_w* s);
+
+#+end_src
+#+begin_export latex
+We declare struct \texttt{lcp\_interval}. It has a common prefix
+length, a lower and an upper bound, and a new middle.
+#+end_export
+#+begin_src c++ <<lcp\_interval wrapper declaration>>=
+  typedef struct lcp_interval_w {
+      long long l;
+      long long i;
+      long long j;
+      long long m;
+  } lcp_interval_w;
+
+#+end_src
+#+begin_export latex
+We declare \texttt{esa} as a struct since \texttt{C} does not have
+classes. We also declare a constructor/destructor pair and functions
+to access the public fields of \texttt{esa}: the suffix array
+\texttt{SA} (as well as the method to get its size), and the base
+string \texttt{S}.
+#+end_export
+#+begin_src c++ <<esa wrappers declaration>>=
+  typedef struct esa_w esa_w;
+
+  esa_w* esa_build_w(sequence_w* subject);
+  void esa_destroy_w(esa_w* w);
+
+  const long* esa_get_SA_w(esa_w* w);
+  size_t esa_get_SA_size_w(esa_w* w);
+  const char* esa_get_S_w(esa_w* w);
+
+#+end_src
+#+begin_export latex
+We include \texttt{<stddef.h>} because we used \texttt{size\_t}.
+#+end_export
+#+begin_src c++ <<Header C++ includes>>=
+  #include <stddef.h>
+#+end_src
+#+begin_export latex
+We declare a wrapper for \texttt{get\_match\_cached}, which accepts a
+wrapper for \texttt{esa}, a query, and a length of the query.
+#+end_export
+#+begin_src c++ <<get\_match\_cached wrapper declaration>>=
+  lcp_interval_w get_match_cached_w(esa_w* w,
+				    const char* query,
+				    size_t qlen);
+
+#+end_src
+#+begin_export latex
+We include \texttt{cstddef} to define \texttt{size\_t}.
+#+end_export
+#+begin_export latex
+\subsection{Source file \texttt{wrapper.cpp}}
+We begin writing the source file for the wrapper. We include the
+wrapper's header and necessary imports. After that, we wrap instances
+of \texttt{esa} and \texttt{sequence} with corresponding wrappers and
+proceed with wrapper implementations.
+#+end_export
+#+begin_src c++ <<wrapper.cpp>>=
+  #include "wrapper.h"
+  //<<C++ imports>>
+
+  struct sequence_w {
+      sequence instance;
+  };
+
+  struct esa_w {
+      esa instance;
+  };
+
+  extern "C" {
+    //<<Wrapper implementations>>
+  }
+#+end_src
+#+begin_export latex
+We include \texttt{esa.h} and \texttt{sequence.h}.
+#+end_export
+#+begin_src c++ <<C++ imports>>=
+  #include "esa.h"
+  #include "sequence.h"
+#+end_src
+#+begin_export latex
+The implementations include wrappers for classes and functions
+declared in the header file.
+#+end_export
+#+begin_src c++ <<Wrapper implementations>>=
+  //<<sequence wrapper>>
+  //<<esa wrapper>>
+  //<<get\_match\_cached wrapper>>
+#+end_src
+#+begin_export latex
+The sequence wrapper contains definitions of constructor/destructor
+and accessors to public fields of \texttt{sequence}.
+#+end_export
+#+begin_src c++ <<sequence wrapper>>=
+  //<<sequence build and destroy>>
+  //<<sequence access public fields>>
+#+end_src
+#+begin_export latex
+We define \texttt{sequence\_build\_w} and
+\texttt{sequence\_destroy\_w}, the constructor and destructor wrappers
+for \texttt{sequence}.
+#+end_export
+#+begin_src c++ <<sequence build and destroy>>=
+  sequence_w* sequence_build_w(const char* name, const char* nucl) {
+      return new sequence_w{sequence(std::string(name), std::string(nucl))};
+  }
+
+  void sequence_destroy_w(sequence_w* s) {
+      delete s;
+  }
+
+#+end_src
+#+begin_export latex
+We define accessors to \texttt{sequence}'s name, nucleotides, and length.
+#+end_export
+#+begin_src c++ <<sequence access public fields>>=
+  const char* sequence_get_name_w(sequence_w* s) {
+      return s->instance.get_name().c_str();
+  }
+
+  const char* sequence_get_nucleotides_w(sequence_w* s) {
+      return s->instance.get_nucl().c_str();
+  }
+
+  size_t sequence_get_length_w(sequence_w* s) {
+      return s->instance.size();
+  }
+
+#+end_src
+#+begin_export latex
+We include \texttt{cstring}.
+#+end_export
+#+begin_src c++ <<C++ imports>>=
+  #include <cstring>
+#+end_src
+#+begin_export latex
+The \texttt{esa} wrapper has definitions for \texttt{esa}
+constructor/destructor and functions to access \texttt{SA} and
+\texttt{S}.
+#+end_export
+#+begin_src c++ <<esa wrapper>>=
+  //<<esa build and destroy>>
+  //<<esa access public fields>>
+#+end_src
+#+begin_export latex
+We define \texttt{esa\_build\_w} and \texttt{esa\_destroy\_w}.
+#+end_export
+#+begin_src c++ <<esa build and destroy>>=
+  esa_w* esa_build_w(sequence_w* subject) {
+      return new esa_w{esa(subject->instance)};
+  }
+
+  void esa_destroy_w(esa_w* w) {
+      delete w;
+  }
+
+#+end_src
+#+begin_export latex
+We define "getters" for \texttt{esa.SA}, \texttt{esa.S}, and size of
+the SA.
+#+end_export
+#+begin_src c++ <<esa access public fields>>=
+  const long* esa_get_SA_w(esa_w* w) {
+    return w->instance.SA.get();
+  }
+
+  const char* esa_get_S_w(esa_w* w) {
+    return w->instance.S.c_str();
+  }
+
+  size_t esa_get_SA_size_w(esa_w* w) {
+    return w->instance.size();
+  }
+
+#+end_src
+#+begin_export latex
+We wrap \texttt{get\_match\_cached}.
+#+end_export
+#+begin_src c++ <<get\_match\_cached wrapper>>=
+  lcp_interval_w get_match_cached_w(esa_w* w, 
+					const char* query,
+					size_t qlen) {
+      lcp_interval ij = w->instance.get_match_cached(query, qlen);
+      return {ij.l, ij.i, ij.j, ij.m};
+  }
+
+#+end_src
+#+begin_export latex
+Our wrapper is ready for compilation as a static library, which will
+be eventually imported in \texttt{fastEsa} with \texttt{cgo}. We will
+use these commands in a \texttt{Makefile} that is not described in
+this document:
+\begin{verbatim}
+  g++ $(CXXFLAGS) $(INCLUDES) -c wrapper.cpp -o wrapper.o
+  ar rcs libwrapper.a wrapper.o,
+\end{verbatim}
+where \texttt{\$(CXXFLAGS)} is compilation flags \texttt{-std=c++17 -Wall -Wextra
+  -Wpedantic -O2} and \texttt{\$(INCLUDES)} is \texttt{-Iphylonium
+  -Iphylonium/src}.
+#+end_export

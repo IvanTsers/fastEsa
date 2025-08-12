@@ -1,0 +1,52 @@
+The search for homologous regions between two DNA sequences, a query
+and a subject, is a fundamental problem in bioinformatics. Many
+programs for sequence comparison involve a step that identifies exact
+matches, which serve as seeds for finding an alignment or estimating a
+distance between a query and a subject.
+
+An enhanced suffix array (ESA) is a data structure often used in
+bioinformatic tools to enable fast exact matching. An ESA consists of
+three components:
+
+\begin{enumerate}
+    \itemsep0em \item a suffix array (SA): an alphabetically ordered
+    array of all suffixes of the subject sequence;
+    
+    \item a longest common prefix array (LCP): for each position in
+    the SA, the LCP stores the length of the longest common
+    prefix between the current and previous suffix, enabling fast
+    search for common sequence regions;
+
+    \item a child array (CLD): holds information about the topology of
+    an implied suffix tree corresponding to the SA. This information
+    is used for constant-time navigation between LCP intervals.
+\end{enumerate}
+
+The ESA is usually built from the subject sequence, and query
+sequences are matched against it. The search process traverses the LCP
+array to determine the longest prefix of the query that is also
+present in the subject, thus enabling identification of maximal exact
+matches.
+
+While exact matching based on ESAs is fast for individual queries,
+performance degrades when both query and subject are large genomic
+sequences. The large depth of the SA (due to the long subject) and the
+long query lead to many LCP lookups during traversal. Since each query
+match begins at the root of the implicit LCP-interval tree, the total
+time spent on matching becomes significant when many queries are
+processed.
+
+However, during repeated searches, shallow intervals in the LCP (those
+near the root) are always re-visited, in other words, a repeated work
+is being done. This repeatedness presents an opportunity for
+optimization. Programs such as \texttt{andi}~\cite{hau15:andi} and
+\texttt{phylonium}~\cite{kloe19:phy} use such techniques as bucket
+tables (to cache common prefixes) and exploit CPU cache locality to
+minimize repeated work and reduce the number of LCP accesses through
+skipping the shallow parts of the ESA~\cite{kloe20:thesis}. These
+optimizations substantially improve runtime for large-scale exact
+matching across many genomic sequences.
+
+The package \texttt{fastEsa} is a \texttt{Go} interface for the
+optimized ESA-based exact matching implemented in \texttt{phylonium},
+which is a \texttt{C++} program.
