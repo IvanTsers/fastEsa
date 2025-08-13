@@ -1,7 +1,6 @@
 # ---------- Helper scripts ----------
 ORG2NW    := bash scripts/org2nw
 PRETANGLE := awk -f scripts/preTangle.awk
-PREWEAVE  := awk -f scripts/preWeave.awk
 
 # ---------- C++ compilation configs ----------
 CXXSTD   ?= -std=c++17
@@ -83,6 +82,7 @@ go-build: $(LIB_PHYL) $(LIB_W) fastEsa.go go.mod
 # We remove go.mod now to enable importing fastEsa locally
 	rm go.mod
 
+.PHONY: doc
 doc:
 	make -C doc
 
