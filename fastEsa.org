@@ -38,6 +38,12 @@ The \texttt{cgo} preamble contains:
   import "C"
 #+end_src
 #+begin_export latex
+\subsection{Functions for \texttt{C} sequences}
+\texttt{phylonium} uses the internal class \texttt{sequence}, for
+which we have exposed a few functions in our wrapper. Now we write a
+\texttt{Go} interface to call these functions and manage sequence
+memory.
+\subsubsection{Function \texttt{NewSequence}}
 The function \texttt{NewSequence} creates a \texttt{C} sequence, which
 are accessed by functions imported from \texttt{phylonium}. The
 function allocates and deallocates memory for sequence's name and
@@ -91,12 +97,13 @@ We import \texttt{unsafe}.
   "unsafe"
 #+end_src
 #+begin_export latex
-The function \texttt{freeSequence} removes a pointer of type
+\subsubsection{Function \texttt{FreeSequence}}
+The function \texttt{FreeSequence} removes a pointer of type
 \texttt{C.sequence\_w} from memory. It calls the destructor for the
 sequence.
 #+end_export
 #+begin_src go <<Functions>>=
-  func freeSequence(sequence *C.sequence_w) {
+  func FreeSequence(sequence *C.sequence_w) {
 	  C.sequence_destroy_w(sequence)
   }
 #+end_src
@@ -182,7 +189,7 @@ stable types.
 #+end_export
 #+begin_src go <<Methods>>=
   func (e *Esa) Sa() []int {
-	  if e.h != nil {
+	  if e.h == nil {
 		  return nil
 	  }
 	  p := C.esa_get_SA_w(e.h)

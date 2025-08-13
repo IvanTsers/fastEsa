@@ -68,13 +68,20 @@ $(LIB_W): build/wrapper.o
 
 
 # ---------- Build the Go program ----------
-go-build: $(LIB_PHYL) $(LIB_W) fastEsa.go
-	go build fastEsa.go fastEsa
-
 # Extract the Go code from the literate program wrapper.org
 
 fastEsa.go: fastEsa.org
 	$(PRETANGLE) fastEsa.org | $(ORG2NW) | notangle -RfastEsa.go | gofmt > fastEsa.go
+
+# Test build
+go.mod:
+	go mod init fastEsa
+	go mod tidy
+
+go-build: $(LIB_PHYL) $(LIB_W) fastEsa.go go.mod
+	go build fastEsa.go
+# We remove go.mod now to enable importing fastEsa locally
+	rm go.mod
 
 doc:
 	make -C doc
@@ -84,6 +91,7 @@ clean:
 	rm -rf build phylonium
 	make clean -C doc
 
-init:
-	go mod init fastEsa
-	go mod tidy
+publish: doc/fastEsaDoc.pdf
+	if mountpoint -q ~/owncloud; then \
+	    cp doc/fastEsaDoc.pdf ~/owncloud/github_docs; \
+	fi
