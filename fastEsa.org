@@ -1,4 +1,5 @@
 #+begin_export latex
+\section{\texttt{fastEsa}: \texttt{Go} interface}
 The package \texttt{fastEsa} is a go interface for functions improted
 from \texttt{phylonium}. The package has hooks for a \texttt{cgo}
 preamble, imports, data types, methods, and functions.
