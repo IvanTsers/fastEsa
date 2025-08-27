@@ -5,7 +5,7 @@ ORG2NW    := bash ../scripts/org2nw
 PREWEAVE  := awk -f ../scripts/preWeave.awk
 
 # Build the version string
-TAG = $(shell git tag --points-at HEAD)
+TAG = $(shell git tag -l | sort -V | tail -n1)
 VERSION = $(shell git log --pretty=format:"%cs, ${TAG}-%h" -n 1)
 
 # to force existing docs to re-compile, we pretend that targets are not files
